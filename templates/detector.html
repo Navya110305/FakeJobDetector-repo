@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block title %}Scanner — JobShield{% endblock %}
+
+{% block extra_topbar %}
+<span class="pill pill-muted" id="apiStatus" title="Backend connection">Checking…</span>
+{% endblock %}
+
+{% block content %}
+<div class="app">
+  <div class="hero">
+    <div class="hero-inner">
+      <h1 class="hero-title">Spot fake internships &amp; job posts before you apply</h1>
+      <p class="hero-sub">
+        Three professional checks — link scan, behavioral quiz, or full-text ML — built for students and first-time applicants.
+      </p>
+    </div>
+  </div>
+
+  <main id="main" class="main">
+    <div class="layout">
+      <aside class="sidebar" aria-label="How it works">
+        <div class="sidebar-card">
+          <h2 class="sidebar-heading">Why JobShield</h2>
+          <ul class="feature-list">
+            <li>
+              <span class="feature-icon" aria-hidden="true">🔗</span>
+              <div>
+                <strong>Link scan</strong>
+                <span>Paste a URL — we fetch public text and score risk.</span>
+              </div>
+            </li>
+            <li>
+              <span class="feature-icon" aria-hidden="true">✓</span>
+              <div>
+                <strong>60s quiz</strong>
+                <span>No copy-paste — answer red-flag questions from memory.</span>
+              </div>
+            </li>
+            <li>
+              <span class="feature-icon" aria-hidden="true">🧠</span>
+              <div>
+                <strong>ML on text</strong>
+                <span>Paste the full post for classifier output + confidence.</span>
+              </div>
+            </li>
+          </ul>
+        </div>
+        <p class="sidebar-note">
+          Advisory only — always verify on the company’s official careers page and trusted job boards.
+        </p>
+      </aside>
+
+      <div class="workspace">
+        <nav class="tabs" role="tablist" aria-label="Detection mode">
+          <button type="button" class="tab active" role="tab" aria-selected="true" data-tab="link" id="tab-link">
+            Smart link scan
+          </button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-tab="quiz" id="tab-quiz">
+            60-second quiz
+          </button>
+          <button type="button" class="tab" role="tab" aria-selected="false" data-tab="paste" id="tab-paste">
+            Paste text
+          </button>
+        </nav>
+
+        <section class="panel card tab-panel" id="panel-link" data-panel="link" role="tabpanel" aria-labelledby="tab-link">
+          <div class="panel-head">
+            <h2 class="panel-title">Smart link scan</h2>
+            <p class="panel-desc">
+              Paste <strong>only the job page URL</strong> — we fetch readable text, run the model, and surface domain signals.
+            </p>
+          </div>
+          <label class="sr-only" for="jobUrl">Job posting URL</label>
+          <div class="field">
+            <input type="url" id="jobUrl" class="input" placeholder="https://careers.example.com/jobs/123" autocomplete="url" />
+          </div>
+          <div class="actions">
+            <button type="button" class="btn btn-primary" id="scanUrlBtn">
+              <span class="btn-label">Scan this link</span>
+              <span class="btn-spinner" hidden aria-hidden="true"></span>
+            </button>
+          </div>
+          <p id="errorMsgLink" class="field-error" role="alert"></p>
+        </section>
+
+        <section class="panel card tab-panel hidden" id="panel-quiz" data-panel="quiz" role="tabpanel" aria-labelledby="tab-quiz" hidden>
+          <div class="panel-head">
+            <h2 class="panel-title">60-second red-flag quiz</h2>
+            <p class="panel-desc">
+              Answer honestly from memory — <strong>no post text needed</strong>. Optimized for common student-targeted scams.
+            </p>
+          </div>
+          <form id="quizForm" class="quiz-form">
+            <fieldset>
+              <legend>Does the offer ask for any upfront payment (registration, kit, security deposit)?</legend>
+              <div class="choice-row">
+                <label class="choice"><input type="radio" name="upfront_fee" value="yes" /> Yes</label>
+                <label class="choice"><input type="radio" name="upfront_fee" value="no" /> No</label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Are you told to contact HR only on Telegram / WhatsApp (no official email)?</legend>
+              <div class="choice-row">
+                <label class="choice"><input type="radio" name="telegram_whatsapp_only" value="yes" /> Yes</label>
+                <label class="choice"><input type="radio" name="telegram_whatsapp_only" value="no" /> No</label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Does it promise unusually high pay for little or no skill / experience?</legend>
+              <div class="choice-row">
+                <label class="choice"><input type="radio" name="unrealistic_pay" value="yes" /> Yes</label>
+                <label class="choice"><input type="radio" name="unrealistic_pay" value="no" /> No</label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Do they ask for bank details or OTP before a proper interview?</legend>
+              <div class="choice-row">
+                <label class="choice"><input type="radio" name="bank_details_early" value="yes" /> Yes</label>
+                <label class="choice"><input type="radio" name="bank_details_early" value="no" /> No</label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Is the company name, website, or official careers link unclear or missing?</legend>
+              <div class="choice-row">
+                <label class="choice"><input type="radio" name="no_company_identity" value="yes" /> Yes</label>
+                <label class="choice"><input type="radio" name="no_company_identity" value="no" /> No</label>
+              </div>
+            </fieldset>
+            <fieldset>
+              <legend>Heavy pressure (“join today”, “only 2 slots left”) with little real detail?</legend>
+              <div class="choice-row">
+                <label class="choice"><input type="radio" name="urgent_pressure" value="yes" /> Yes</label>
+                <label class="choice"><input type="radio" name="urgent_pressure" value="no" /> No</label>
+              </div>
+            </fieldset>
+            <div class="actions">
+              <button type="submit" class="btn btn-primary" id="quizSubmitBtn">
+                <span class="btn-label">Get quiz score</span>
+                <span class="btn-spinner" hidden aria-hidden="true"></span>
+              </button>
+            </div>
+          </form>
+          <p id="errorMsgQuiz" class="field-error" role="alert"></p>
+        </section>
+
+        <section class="panel card tab-panel hidden" id="panel-paste" data-panel="paste" role="tabpanel" aria-labelledby="tab-paste" hidden>
+          <div class="panel-head">
+            <h2 class="panel-title">Paste full post</h2>
+            <p class="panel-desc">Paste title + description for ML classification and confidence.</p>
+          </div>
+          <label class="sr-only" for="jobText">Job post text</label>
+          <div class="field">
+            <textarea id="jobText" class="input textarea" placeholder="Paste internship or job post text here…" rows="8"></textarea>
+          </div>
+          <div class="actions">
+            <button type="button" class="btn btn-primary" id="analyzeBtn">
+              <span class="btn-label">Analyze post</span>
+              <span class="btn-spinner" hidden aria-hidden="true"></span>
+            </button>
+          </div>
+          <p id="errorMsgPaste" class="field-error" role="alert"></p>
+        </section>
+
+        <section class="result card" id="resultCard" hidden>
+          <div class="result-header">
+            <h2 class="result-title">Analysis result</h2>
+            <span class="result-badge" id="resultBadge">—</span>
+          </div>
+          <p id="resultMode" class="result-mode"></p>
+
+          <div class="result-visual">
+            <div class="risk-ring-wrap" aria-hidden="true">
+              <svg class="risk-ring" viewBox="0 0 120 120" width="120" height="120">
+                <circle class="risk-ring-bg" cx="60" cy="60" r="52" fill="none" stroke-width="10" />
+                <circle id="riskRingFill" class="risk-ring-fill" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" transform="rotate(-90 60 60)" />
+              </svg>
+              <div class="risk-ring-label">
+                <span class="risk-ring-value" id="riskRingValue">0</span>
+                <span class="risk-ring-unit">/ 100</span>
+              </div>
+            </div>
+            <div class="result-metrics">
+              <div class="metric">
+                <span class="metric-label">Verdict</span>
+                <strong class="metric-value" id="resultLabel">—</strong>
+              </div>
+              <div class="metric" id="confidenceRow">
+                <span class="metric-label">Model confidence</span>
+                <strong class="metric-value" id="confidence">—</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="risk-bar-wrap">
+            <div class="risk-bar-label"><span>Risk level</span><span id="riskBarCaption">—</span></div>
+            <div class="risk-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="riskBar">
+              <div class="risk-bar-fill" id="riskBarFill"></div>
+            </div>
+          </div>
+
+          <div id="extraBlock" class="extra-block" hidden></div>
+
+          <div class="checklist">
+            <h3 class="checklist-title">Safety checklist</h3>
+            <ul class="checklist-items">
+              <li>Never pay upfront fees for interviews or onboarding.</li>
+              <li>Verify company domain and recruiter email.</li>
+              <li>Do not share bank details or OTPs before a verified process.</li>
+              <li>Cross-check on LinkedIn, Naukri, or the official careers site.</li>
+            </ul>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <p><strong>JobShield</strong> — advisory screening for students. Not legal or employment advice.</p>
+      <p class="footer-fine">Link scan may fail on login-only pages, PDFs, or bot-blocked sites.</p>
+    </div>
+  </footer>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}JobShield — Protect students from fake job posts{% endblock %}
+
+{% block content %}
+<main id="main">
+  <section class="landing-hero">
+    <div class="landing-inner">
+      <p class="landing-kicker">Built for students &amp; first-time applicants</p>
+      <h1 class="landing-title">Know if a job post is <span class="text-gradient">worth your trust</span></h1>
+      <p class="landing-lead">
+        JobShield combines machine learning, link analysis, and a quick behavioral quiz so you can spot suspicious internships and listings before you share personal data or pay any fees.
+      </p>
+      <div class="landing-cta">
+        {% if session.user_id %}
+        <a class="btn btn-primary btn-lg" href="{{ url_for('detector') }}">Open scanner</a>
+        {% else %}
+        <a class="btn btn-primary btn-lg" href="{{ url_for('signup') }}">Create free account</a>
+        <a class="btn btn-ghost btn-lg" href="{{ url_for('login') }}">Log in</a>
+        {% endif %}
+      </div>
+      <ul class="landing-stats">
+        <li><strong>3</strong><span>ways to scan</span></li>
+        <li><strong>ML</strong><span>+ domain checks</span></li>
+        <li><strong>Free</strong><span>for students</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="landing-features">
+    <div class="landing-inner">
+      <h2 class="section-title">Everything in one place</h2>
+      <div class="feature-grid">
+        <article class="feature-card">
+          <div class="feature-card-icon">🔗</div>
+          <h3>Smart link scan</h3>
+          <p>Paste a job URL — we pull public page text and flag domain-level risks.</p>
+        </article>
+        <article class="feature-card">
+          <div class="feature-card-icon">⏱</div>
+          <h3>60-second quiz</h3>
+          <p>Answer red-flag questions from memory — no copy-paste required.</p>
+        </article>
+        <article class="feature-card">
+          <div class="feature-card-icon">🧠</div>
+          <h3>ML on full text</h3>
+          <p>Paste the full post for classifier output with confidence scores.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="landing-cta-bottom">
+    <div class="landing-inner cta-panel">
+      <div>
+        <h2 class="cta-title">Ready to screen your next opportunity?</h2>
+        <p class="cta-desc">Create an account to use the scanner. Your credentials are stored securely in our database.</p>
+      </div>
+      {% if session.user_id %}
+      <a class="btn btn-primary btn-lg" href="{{ url_for('detector') }}">Go to scanner</a>
+      {% else %}
+      <a class="btn btn-primary btn-lg" href="{{ url_for('signup') }}">Get started</a>
+      {% endif %}
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="footer-inner">
+    <p><strong>JobShield</strong> — advisory screening for students. Not legal or employment advice.</p>
+    <p class="footer-fine">SQLite user database · Flask · scikit-learn</p>
+  </div>
+</footer>
+{% endblock %}

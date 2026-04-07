@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Sign up — JobShield{% endblock %}
+
+{% block content %}
+<main id="main" class="auth-page">
+  <div class="auth-card card">
+    <h1 class="auth-heading">Create account</h1>
+    <p class="auth-sub">Passwords are hashed — we never store plain text.</p>
+    <form method="post" action="{{ url_for('signup_post') }}" class="auth-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <div class="field">
+        <label class="label" for="full_name">Full name <span class="optional">(optional)</span></label>
+        <input class="input" type="text" id="full_name" name="full_name" autocomplete="name" />
+      </div>
+      <div class="field">
+        <label class="label" for="email">Email</label>
+        <input class="input" type="email" id="email" name="email" required autocomplete="email" />
+      </div>
+      <div class="field">
+        <label class="label" for="password">Password</label>
+        <input class="input" type="password" id="password" name="password" required minlength="8" autocomplete="new-password" />
+        <span class="field-hint">At least 8 characters</span>
+      </div>
+      <div class="field">
+        <label class="label" for="password_confirm">Confirm password</label>
+        <input class="input" type="password" id="password_confirm" name="password_confirm" required minlength="8" autocomplete="new-password" />
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Create account</button>
+    </form>
+    <p class="auth-footer">
+      Already have an account? <a href="{{ url_for('login') }}">Log in</a>
+    </p>
+  </div>
+</main>
+{% endblock %}

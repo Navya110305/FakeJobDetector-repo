@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}JobShield{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
+  {% block extra_head %}{% endblock %}
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a href="{{ url_for('home') }}" class="brand" aria-label="JobShield home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="32" height="32" rx="8" fill="url(#g)"/>
+            <path d="M9 16L14 21L23 11" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <defs>
+              <linearGradient id="g" x1="4" y1="4" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#2563eb"/>
+                <stop offset="1" stop-color="#7c3aed"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </span>
+        <span class="brand-text">
+          <span class="brand-name">JobShield</span>
+          <span class="brand-tagline">Student safety</span>
+        </span>
+      </a>
+      <nav class="site-nav" aria-label="Main">
+        <a href="{{ url_for('home') }}" class="nav-link{% if request.endpoint == 'home' %} active{% endif %}">Home</a>
+        {% if session.user_id %}
+        <a href="{{ url_for('detector') }}" class="nav-link{% if request.endpoint == 'detector' %} active{% endif %}">Scanner</a>
+        <span class="nav-user" title="{{ session.user_email }}">{{ session.user_name }}</span>
+        <form method="post" action="{{ url_for('logout') }}" class="inline-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+          <button type="submit" class="nav-link nav-link-muted nav-button">Log out</button>
+        </form>
+        {% else %}
+        <a href="{{ url_for('login') }}" class="nav-link">Log in</a>
+        <a href="{{ url_for('signup') }}" class="btn btn-nav">Sign up</a>
+        {% endif %}
+      </nav>
+      {% block extra_topbar %}{% endblock %}
+    </div>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flash-wrap" role="region" aria-label="Notifications">
+    {% for category, message in messages %}
+    <div class="flash flash-{{ category }}">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+  {% block scripts %}{% endblock %}
+</body>
+</html>
