@@ -1,219 +1,267 @@
-# 🛡️ JobShield — Intelligent Student Job & Internship Scam Detector
+# JobShield - Intelligent Student Job & Internship Scam Detector
 
-JobShield is a professional, multi-layered security web application designed to protect students and job seekers from fraudulent job offers and internship scams. By combining **machine learning text classification**, **live webpage scraping**, **domain reputation analysis**, and a **weighted red-flag diagnostic quiz**, JobShield provides a highly accurate risk assessment for job postings.
+![JobShield Banner](static/jobshield_banner.png)
 
----
-
-## 🎯 The Problem & Our Solution
-
-Employment scams targeting students are at an all-time high, often tricking victims into paying "registration fees" or revealing sensitive banking details. Standard ML classifiers can fail if the scammer writes a polished job description. 
-
-**JobShield** addresses this with a **hybrid, multi-layered verification system**:
-1. **Machine Learning Classifier**: Analyzes job description text for subtle lexical scam patterns.
-2. **Domain Reputation Analyzer**: Evaluates the safety, suspicious TLDs, and keyword abuse of the hosting domain.
-3. **Company Legitimacy Verifier**: Checks for verified corporate markers (founding year, leadership, legal policies) vs. scam indicators (WhatsApp/Telegram-only contact, upfront payment demands).
-4. **Behavioral Red-Flag Quiz**: A user-facing interactive diagnostic quiz that scores risk based on candidate experiences.
+**JobShield** is an advanced, student-focused web application designed to detect and flag fraudulent job and internship postings. With the rise of sophisticated recruitment scams targeting university students and fresh graduates, JobShield provides a multi-layered security scanner that combines Machine Learning (ML) text classification, live web page extraction, domain security analysis, and a structured behavioral self-assessment quiz.
 
 ---
 
-## 🏗️ System Architecture & Workflow
+## 🎯 Key Features
+
+JobShield uses a **multi-layered hybrid detection engine** to evaluate the legitimacy of job listings.
 
 ```
-                        +----------------------------+
-                        |      User Input (URL)      |
-                        +--------------+-------------+
-                                       |
-                                       v
-                        +--------------+-------------+
-                        |   Fetch Live Page Content  |
-                        +--------------+-------------+
-                                       |
-           +---------------------------+---------------------------+
-           |                           |                           |
-           v                           v                           v
-+----------+----------+     +----------+----------+     +----------+----------+
-|  Domain Analysis    |     |  Company Legitimacy |     |   ML Text Classifier |
-|  - TLD validation   |     |  - Scam flags       |     |   - Naive Bayes      |
-|  - Email check      |     |  - Legitimacy flags |     |   - Feature tags     |
-+----------+----------+     +----------+----------+     +----------+----------+
-           |                           |                           |
-           +---------------------------+---------------------------+
-                                       |
-                                       v
-                        +--------------+-------------+
-                        |   Hybrid Risk-Scoring Engine|
-                        |   - Penalty/Boost logic    |
-                        +--------------+-------------+
-                                       |
-                                       v
-                        +--------------+-------------+
-                        |   Verification Report      |
-                        |   (Result: FAKE/GENUINE)   |
-                        +----------------------------+
+                  ┌───────────────────────────────┐
+                  │      Incoming Job Listing      │
+                  └───────────────┬───────────────┘
+                                  │
+         ┌────────────────────────┼────────────────────────┐
+         ▼                        ▼                        ▼
+┌─────────────────┐      ┌─────────────────┐      ┌─────────────────┐
+│  ML Text Scan   │      │    URL / TLD    │      │  Behavior Quiz  │
+│  (Naive Bayes)  │      │   Reputation    │      │  (Interactive)  │
+└────────┬────────┘      └────────┬────────┘      └────────┬────────┘
+         │                        │                        │
+         └────────────────────────┼────────────────────────┘
+                                  ▼
+                     ┌─────────────────────────┐
+                     │   Legitimacy Engine     │
+                     │  (Weights & Penalties)  │
+                     └────────────┬────────────┘
+                                  ▼
+                     ┌─────────────────────────┐
+                     │    Scan Report Card     │
+                     └─────────────────────────┘
 ```
 
----
+1. **Machine Learning Classifier (`/predict`)**
+   - Natural Language Processing (NLP) text classifier utilizing `TfidfVectorizer` (with bigrams) and a `MultinomialNB` (Naive Bayes) model.
+   - Custom feature engineering pre-processor that injects weighted context tokens (`FAKE_IND_*` and `GENUINE_IND_*`) based on behavioral patterns.
 
-## ✨ Core Features
+2. **Dynamic URL & Web Scanner (`/scan-url`)**
+   - Fetches and parses live job postings using robust scraping and HTML content parsing.
+   - Extracts structured schema metadata (`JobPosting` and `Organization` JSON-LD or OpenGraph headers) to identify candidate-facing data.
+   - **Domain Check**: Cross-references the hosting domain against known high-trust job boards and warns on suspicious top-level domains (TLDs like `.xyz`, `.top`, `.click`, `.tk`) or free-email hosts.
+   - **Company Verification**: Looks for corporate trust signals (e.g., founding year, headquarters, privacy policies, leadership teams) versus recruitment red flags (upfront fees, chat-only communication, artificial urgency).
 
-*   **🔒 Account-Based Access**: Complete registration, login, and session management system using SQLite, SQLAlchemy, and password hashing (via `Werkzeug`).
-*   **📊 Integrated Job Scanner Dashboard**: A protected workspace where authenticated users can inspect raw text or live URLs.
-*   **🌐 Live URL Scraping**: Automatically extracts metadata (such as Schema.org `JobPosting` and `Organization` JSON-LD structures) and cleans webpage body text for analysis.
-*   **🧠 Advanced Text Feature Engineering**: Infuses the Naive Bayes model with customized indicators (e.g., WhatsApp hiring, upfront payment, domain match, and verified office location).
-*   **📝 Diagnostic Risk Quiz**: A weighted questionnaire scoring indicators like upfront payment, messaging-app communication, and early bank details requests.
-*   **⚡ Production-Ready Security Defaults**: Includes CSRF validation on forms, security-hardened session cookies, HTTPOnly flags, and strict request payload sizing limits.
+3. **Interactive Behavioral Quiz (`/quiz`)**
+   - A client-side questionnaire assessing soft/process signals.
+   - Weights responses based on risk factors (e.g., upfront payment requested, bank information asked before an interview, messaging-only recruiters) to return a diagnostic risk rating.
+
+4. **Account-Based Access Control**
+   - User signup and login routes secure the dashboard scanner using SQLite and Werkzeug password hashing.
+   - Enforces protected routes (`/detector`) and secure cookie configurations.
 
 ---
 
 ## 🛠️ Technology Stack
 
-*   **Backend**: Python, Flask, Flask-SQLAlchemy, Flask-CORS
-*   **Machine Learning**: Scikit-Learn (Multinomial Naive Bayes, TF-IDF Vectorizer with bigrams), Pandas, Joblib
-*   **Web Scraping**: BeautifulSoup4, urllib
-*   **Database**: SQLite (SQLAlchemy ORM)
-*   **Frontend**: HTML5, Vanilla CSS3 (curated dark mode and premium glassmorphism), Vanilla Javascript (ES6+)
+- **Backend**: Python 3, Flask, SQLAlchemy (SQLite), BeautifulSoup4
+- **Machine Learning**: Scikit-Learn, Joblib, Pandas
+- **Frontend**: HTML5, Vanilla CSS3 (Modern Glassmorphism Design System), Javascript (ES6)
+- **Testing & Tooling**: Pytest, Ruff
+
+---
+
+## ⚡ Quick Start
+
+### 1. Installation
+
+Clone the repository and set up a virtual environment:
+
+```bash
+# Clone the repository
+git clone https://github.com/Prudhvi2206/FakeJobPostDetector.git
+cd FakeJobPostDetector
+
+# Create a virtual environment
+python -m venv venv
+
+# Activate the virtual environment
+# On Windows (PowerShell):
+venv\Scripts\Activate.ps1
+# On Linux/macOS:
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 2. Train the ML Model
+
+Generate the classifier and vectorizer artifacts:
+
+```bash
+python model.py
+```
+*This updates `model.pkl` and `vectorizer.pkl` based on the balanced dataset in `data/job_posts.csv`.*
+
+### 3. Run the Flask Web Application
+
+Start the development server:
+
+```bash
+python backend/app.py
+```
+Open your browser and navigate to `http://127.0.0.1:5000`.
 
 ---
 
 ## ⚙️ Environment Configuration
 
-JobShield uses environment variables for secure and flexible configuration. Copy the following keys to your shell session or define them in a `.env` file (see `.env.example`):
+JobShield reads the following environment variables from your session:
 
-| Variable | Description | Default (Dev) |
-| :--- | :--- | :--- |
-| `JOBSHIELD_ENV` | Application environment (`development` or `production`) | `development` |
-| `JOBSHIELD_DEBUG` | Enables debug logging and interactive debugger (`1` or `0`) | `0` |
-| `JOBSHIELD_SECRET` | Required Flask session secret key (generate a strong random string) | *Dev fallback* |
-| `JOBSHIELD_CORS_ORIGINS` | Comma-separated list of allowed origins | `*` (if empty, CORS disabled) |
-| `JOBSHIELD_MAX_BODY_BYTES` | Maximum allowed request body size in bytes | `65536` (64KB) |
+| Variable | Description | Default | Mode |
+|----------|-------------|---------|------|
+| `JOBSHIELD_ENV` | App mode (`development` or `production`) | `development` | All |
+| `JOBSHIELD_DEBUG` | Enables debug logging and interactive reload | `0` (False) | Dev |
+| `JOBSHIELD_SECRET` | Secret key used for session cryptographic signatures | (Required in prod) | Prod |
+| `JOBSHIELD_CORS_ORIGINS` | Comma-separated list of allowed origins | (Disables CORS if empty) | Prod |
+| `JOBSHIELD_MAX_BODY_BYTES` | Maximum allowed request payload body in bytes | `65536` | All |
 
-Example configuration in Windows PowerShell:
+### Windows PowerShell Example:
 ```powershell
 $env:JOBSHIELD_ENV="development"
 $env:JOBSHIELD_DEBUG="1"
-$env:JOBSHIELD_SECRET="a-very-long-secure-random-string-for-flask"
-```
-
----
-
-## 🚀 Getting Started
-
-### 1. Prerequisites
-Make sure you have **Python 3.8+** installed on your system.
-
-### 2. Set Up Virtual Environment
-Initialize a virtual environment to keep dependencies isolated:
-```bash
-# Create virtual environment
-python -m venv venv
-
-# Activate on Windows (CMD/PowerShell)
-.\venv\Scripts\activate
-
-# Activate on Unix/macOS
-source venv/bin/activate
-```
-
-### 3. Install Dependencies
-Install all required libraries and dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Train the Machine Learning Model
-Train the Multinomial Naive Bayes classifier on the labeled job dataset (`data/job_posts.csv`):
-```bash
-python model.py
-```
-*This command outputs the training metrics and exports `model.pkl` and `vectorizer.pkl` to the root directory.*
-
-### 5. Run the Application
-Start the Flask backend web server:
-```bash
+$env:JOBSHIELD_SECRET="a-very-long-secure-random-secret-key"
 python backend/app.py
 ```
-Navigate to **`http://127.0.0.1:5000`** in your browser.
 
 ---
 
-## 🔍 Heuristics & Feature Engineering Details
+## 🔬 Machine Learning Features
 
-### 1. ML Feature Enrichment
-Before vectorization, raw job descriptions are passed through `extract_features()` which appends markers to the text:
-*   **Fake Markers**: `FAKE_IND_whatsapp_contact`, `FAKE_IND_registration_fee`, `FAKE_IND_payment_required`, `FAKE_IND_urgency_tactic`, `FAKE_IND_unrealistic_promise`
-*   **Genuine Markers**: `GENUINE_IND_official_channel`, `GENUINE_IND_career_domain`, `GENUINE_IND_no_fees`, `GENUINE_IND_direct_apply`, `GENUINE_IND_official_email`
+The model categorizes listings by searching for linguistic indicators prior to Naive Bayes probability matching:
 
-### 2. Hybrid Scoring Rules
-```python
-Combined Score = ML_Score - abs(Domain_Penalty) - abs(Company_Penalty) + Trusted_Domain_Bonus + Company_Verified_Bonus
-```
-*   If a scam indicator (e.g. upfront fee required) is confirmed and the company is unverified, the risk score is automatically set to `0` (identified as **FAKE**).
-*   If a domain matches a verified top-tier brand, a positive boost is applied to the confidence level.
+### FAKE Job Indicators:
+- **Known Fake/Clone Names**: `codesoft`, `cognifyz`, `apex`, etc.
+- **Messaging-Only Contacts**: Only Telegram or WhatsApp hiring channels.
+- **Upfront Fees**: Join fees, training kit deposits, or device investments.
+- **Urgency/Scarcity**: Urging candidates to pay or enroll due to "limited seats".
+- **Unrealistic Promises**: "100% placement guarantees" or "easy income".
+
+### GENUINE Job Indicators:
+- **Verified Domains**: Official corporate careers paths or standard job boards.
+- **Legitimate Email Formats**: Application portals requesting resumes sent to `@company.com`.
+- **Corporate Transparency**: Mentions of company founding dates, headquarters, team descriptions, and privacy policies.
 
 ---
 
-## 🧪 Testing & Code Quality
+## 🧪 Testing & Verification
 
-### Automated Unit Tests
-To run the automated API and unit test suite:
+Ensure your environment complies with code standards and all tests pass:
+
+### 1. Run Unit Tests (Pytest)
 ```bash
 python -m pytest
 ```
+*This validates API schemas, session security baselines, and quiz logic.*
 
-### URL Scanning Integration Test
-To validate live fetching and hybrid score evaluation against specific targets (e.g., Cognifyz, LinkedIn, Google):
+### 2. Run URL Scanner Validation
+Execute the pre-defined target verification script:
 ```bash
-# Ensure Flask server is running in another terminal
 python test_cognifyz.py
 ```
+*This script tests real-world URL behaviors against the local backend server (requires Flask running).*
 
-### Linting & Formatting
-Ensure strict adherence to Python styling standards:
+### 3. Lint Codebase
+Validate style conventions:
 ```bash
 python -m ruff check .
 ```
 
 ---
 
-## 📂 Project Directory Structure
+## 🔌 API Reference (JSON)
 
-```text
-fake_job_detector/
-├── backend/
-│   ├── app.py                # Main Flask application and API routes
-│   ├── model.pkl            # Copied model artifact for backend runtime
-│   └── vectorizer.pkl       # Copied vectorizer artifact for backend runtime
-├── data/
-│   └── job_posts.csv        # Stratified dataset (63 samples) for model training
-├── templates/
-│   ├── base.html            # Core layout template with styling and navigation
-│   ├── home.html            # Static landing and presentation page
-│   ├── login.html           # Secure user authentication forms
-│   ├── signup.html          # Registration form
-│   └── detector.html        # Interactive user dashboard
-├── static/
-│   ├── styles.css           # Global stylesheet and responsive designs
-│   └── script.js            # Main dashboard event handlers and API requests
-├── frontend/                # Legacy static-only front-end layout (for reference)
-│   ├── index.html
-│   ├── styles.css
-│   └── script.js
-├── tests/
-│   └── test_api_basics.py   # Basic Flask endpoint integration tests
-├── .env.example             # Template for local environment configuration
-├── IMPROVEMENTS.md          # Technical documentation of improvements from v1.0 -> v2.0
-├── model.py                 # ML pipeline, feature engineering, and model exporter
-├── requirements.txt         # Required Python libraries
-└── test_cognifyz.py         # Diagnostic URL testing suite
+### 1. Health Status Check
+- **Endpoint**: `GET /api/health`
+- **Response**:
+```json
+{
+  "service": "JobShield API",
+  "version": "1.0.0",
+  "status": "ready"
+}
+```
+
+### 2. Predict Text Content Risk
+- **Endpoint**: `POST /predict`
+- **Body**: `{ "text": "Urgent recruitment! Pay 500 Rupees registration fee for WhatsApp work from home typing job. 100% guaranteed income!" }`
+- **Response**:
+```json
+{
+  "result": "FAKE",
+  "risk_score": 0,
+  "confidence": 1.0
+}
+```
+
+### 3. Scan Webpage / URL
+- **Endpoint**: `POST /scan-url`
+- **Body**: `{ "url": "https://careers.google.com/" }`
+- **Response**:
+```json
+{
+  "mode": "url_scan",
+  "url": "https://careers.google.com/",
+  "result": "GENUINE",
+  "risk_score": 100,
+  "confidence": 1.0,
+  "company_verification": {
+    "name": "Google",
+    "is_verified": true,
+    "legitimate_indicators": 5,
+    "scam_indicators": 0,
+    "signals": [
+      "Company background information provided",
+      "Physical office location mentioned",
+      "Company name appears in page text",
+      "Domain name matches company name"
+    ]
+  },
+  "domain": {
+    "hostname": "careers.google.com",
+    "is_trusted": true,
+    "signals": [
+      "Verified top-tier company or trusted applicant tracking system."
+    ]
+  },
+  "note": "Deep analysis: ML score + domain analysis + company legitimacy verification. Always verify on official career sites."
+}
+```
+
+### 4. Behavioral Quiz Evaluate
+- **Endpoint**: `POST /quiz`
+- **Body**:
+```json
+{
+  "answers": {
+    "upfront_fee": true,
+    "telegram_whatsapp_only": true,
+    "unrealistic_pay": false
+  }
+}
+```
+- **Response**:
+```json
+{
+  "mode": "quiz",
+  "risk_score": 50,
+  "label": "SUSPICIOUS",
+  "triggered_flags": [
+    "upfront_fee",
+    "telegram_whatsapp_only"
+  ],
+  "max_possible": 100
+}
 ```
 
 ---
 
-## 🛡️ Production Security Checklist
+## 🔒 Production Guidelines
 
-*   [ ] Set `JOBSHIELD_ENV` to `production`.
-*   [ ] Set `JOBSHIELD_DEBUG` to `0`.
-*   [ ] Generate and set a cryptographically secure `JOBSHIELD_SECRET`.
-*   [ ] Configure `JOBSHIELD_CORS_ORIGINS` to contain only trusted domains.
-*   [ ] Serve the app behind a reverse proxy (e.g., Nginx) and use a WSGI server like `Gunicorn` or `Waitress`.
-*   [ ] Ensure HTTPS is enabled to secure transmission of passwords and session tokens.
+- **Always turn off debug mode** (`JOBSHIELD_DEBUG=0`).
+- Ensure `JOBSHIELD_SECRET` is set to a cryptographically strong, random string.
+- Restrict `JOBSHIELD_CORS_ORIGINS` to your production frontend URLs.
+- Run the server behind a secure WSGI server (such as `gunicorn` or `waitress`) and use an Nginx/Apache reverse proxy to handle HTTPS/SSL termination.
