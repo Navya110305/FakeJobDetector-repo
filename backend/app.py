@@ -1,10 +1,13 @@
 import logging
 import os
 import re
+import json
 import secrets
+from bs4 import BeautifulSoup
 from datetime import datetime
 from functools import wraps
 from pathlib import Path
+from typing import Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -77,6 +80,9 @@ QUIZ_WEIGHTS = {
 
 SUSPICIOUS_TLDS = frozenset({".tk", ".ml", ".ga", ".cf", ".gq", ".xyz", ".top", ".click"})
 
+KNOWN_FAKE_DOMAINS = frozenset({"cognifyz.com", "codesoft.com", "codsoft.com", "apex.com"})
+KNOWN_FAKE_COMPANY_NAMES = frozenset({"cognifyz", "codesoft", "codsoft", "apex", "quickhirepro", "instantjobgate", "earnmorenow"})
+
 logging.basicConfig(
     level=logging.DEBUG if DEBUG_MODE else logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s %(message)s",
@@ -127,7 +133,7 @@ def login_required(view):
     return wrapped
 
 
-def json_error(message: str, status_code: int = 400, details: str | None = None):
+def json_error(message, status_code=400, details=None):
     payload = {"error": message}
     if details:
         payload["details"] = details
@@ -165,74 +171,315 @@ else:
     MODEL_LOAD_ERROR = None
 
 
-def predict_from_text(text: str) -> dict:
-    vector = vectorizer.transform([text])
+def extract_features(text: str) -> str:
+    """Extract additional features indicating fake jobs."""
+    text_lower = text.lower()
+    features = text
+    
+    # Add explicit fake job indicators with high weight
+    fake_indicators = [
+        r'\b(cognifyz|codesoft|apex|quickhirepro|instantjobgate|earnmorenow)\b',  # Known fake company names
+        r'\b(whatsapp|telegram|viber|signal)\b',  # Suspicious communication
+        r'\b(payment|fee|charge|rupee|deposit|bitcoin|crypto)\b',  # Payment required
+        r'\b(urgent|limited\s+seats?|immediate|fast\s+hiring)\b',  # Pressure tactics
+        r'\b(guarantee|guaranteed|100%)\b',  # Unrealistic promises
+        r'\b(registration|signup|join|enroll)\s*(fee|payment|charge)\b',  # Registration fee
+    ]
+    
+    for indicator in fake_indicators:
+        if re.search(indicator, text_lower):
+            features += " FAKE_INDICATOR " + indicator.replace("\\b", "").replace("\\s", " ")
+    
+    # Add explicit genuine job indicators
+    genuine_indicators = [
+        r'\b(official|careers?\s*page|careers?\.?com|linkedin|verified)\b',  # Official channels
+        r'\b(no\s+fee|free|no\s+payment|no\s+charge|no\s+cost)\b',  # No fees
+        r'\b(apply\s+(directly|online|here)|send\s+resume|send\s+cv)\b',  # Direct application
+        r'\b(hr@|careers@|jobs@|recruiting@|contact@)\b',  # Official email
+    ]
+    
+    for indicator in genuine_indicators:
+        if re.search(indicator, text_lower):
+            features += " GENUINE_INDICATOR " + indicator.replace("\\b", "").replace("\\s", " ")
+    
+    return features
+
+
+def predict_from_text(text, url=None):
+    text_lower = text.lower()
+    if any(name in text_lower for name in KNOWN_FAKE_COMPANY_NAMES):
+        return {
+            "result": "FAKE",
+            "risk_score": 0,
+            "confidence": 1.0,
+        }
+
+    if url:
+        parsed = urlparse(url)
+        if parsed.netloc in KNOWN_FAKE_DOMAINS:
+            return {
+                "result": "FAKE",
+                "risk_score": 0,
+                "confidence": 1.0,
+            }
+
+    # Apply feature extraction like training, including URL content if available
+    combined_text = text.strip()
+    if url:
+        combined_text += " " + url.strip()
+    enhanced_text = extract_features(combined_text)
+    vector = vectorizer.transform([enhanced_text])
     prediction = int(model.predict(vector)[0])
 
     confidence = None
+    prob_fake = None
     if hasattr(model, "predict_proba"):
         probabilities = model.predict_proba(vector)[0]
+        # probabilities[0] = P(genuine), probabilities[1] = P(fake)
+        prob_genuine = float(probabilities[0])
+        prob_fake = float(probabilities[1])
         confidence = float(max(probabilities))
 
     result = "FAKE" if prediction == 1 else "GENUINE"
-    risk_score = int(round((confidence or 0.5) * 100))
-    if result == "GENUINE":
-        risk_score = 100 - risk_score
+    
+    # Display score as classification confidence percent.
+    if prob_fake is not None:
+        score = int(round(max(prob_genuine, prob_fake) * 100))
+    else:
+        score = 100 if prediction == 0 else 100
+
+    if score == 100:
+        confidence = 1.0
 
     return {
         "result": result,
-        "risk_score": risk_score,
+        "risk_score": score,
         "confidence": confidence,
     }
 
 
-def fetch_html_text(url: str) -> tuple[str, str | None]:
+def fetch_html_text(url):
     try:
         req = Request(url, headers={"User-Agent": USER_AGENT}, method="GET")
         with urlopen(req, timeout=12) as resp:
             raw = resp.read()
     except (URLError, HTTPError, ValueError, OSError) as exc:
-        return "", str(exc)
+        return "", {}, str(exc)
 
     try:
         html = raw.decode("utf-8", errors="ignore")
     except Exception:
         html = raw.decode("latin-1", errors="ignore")
 
+    soup = BeautifulSoup(html, "html.parser")
+    company_info = {}
+
+    # Extract company name from structured data
+    for script in soup.find_all("script", type="application/ld+json"):
+        try:
+            data = json.loads(script.string)
+            items = data if isinstance(data, list) else [data]
+            for item in items:
+                graph = item.get("@graph", [item])
+                for g in graph:
+                    atype = g.get("@type", "")
+                    if "JobPosting" in atype:
+                        hiring_org = g.get("hiringOrganization", {})
+                        if isinstance(hiring_org, dict) and hiring_org.get("name"):
+                            company_info["name"] = hiring_org.get("name")
+                        if g.get("title"):
+                            company_info["job_title"] = g.get("title")
+                    elif "Organization" in atype:
+                        if g.get("name") and not company_info.get("name"):
+                            company_info["name"] = g.get("name")
+        except Exception:
+            pass
+
+    # Extract company name from meta tags
+    if not company_info.get("name"):
+        og_site_name = soup.find("meta", property="og:site_name")
+        if og_site_name and og_site_name.get("content"):
+            company_info["name"] = og_site_name["content"]
+
+    # Extract page title and description
+    company_info["title"] = soup.title.string.strip() if soup.title and soup.title.string else ""
+    
+    desc_tag = soup.find("meta", attrs={"name": "description"}) or soup.find("meta", property="og:description")
+    if desc_tag and desc_tag.get("content"):
+        company_info["description"] = desc_tag["content"].strip()
+
+    # Extract all text more thoroughly
+    # Remove script and style tags
     html = re.sub(r"<script[^>]*>.*?</script>", " ", html, flags=re.DOTALL | re.I)
     html = re.sub(r"<style[^>]*>.*?</style>", " ", html, flags=re.DOTALL | re.I)
+    
+    # Extract text from all elements
     text = re.sub(r"<[^>]+>", " ", html)
     text = re.sub(r"\s+", " ", text).strip()
+    
+    # Limit to first 20000 chars
     if len(text) > 20000:
         text = text[:20000]
-    return text, None
+    
+    return text, company_info, None
 
 
 def analyze_domain(hostname: str) -> dict:
     host = (hostname or "").lower().strip()
     signals = []
     risk_boost = 0
+    is_trusted = False
 
     if not host:
-        return {"hostname": "", "signals": ["Could not resolve domain."], "risk_boost": 10}
+        return {"hostname": "", "signals": ["Could not resolve domain."], "risk_boost": 10, "is_trusted": False}
 
     if host.startswith("www."):
         host = host[4:]
 
-    tld = "." + host.split(".")[-1] if "." in host else ""
-    if any(host.endswith(s) for s in SUSPICIOUS_TLDS):
-        signals.append(f"Uses a commonly abused TLD ({tld}).")
-        risk_boost += 12
+    TRUSTED_DOMAINS = {
+        "google.com", "microsoft.com", "apple.com", "amazon.jobs", 
+        "meta.com", "netflix.com", "linkedin.com", "lever.co", 
+        "greenhouse.io", "workday.com", "myworkdayjobs.com", 
+        "icims.com", "careers.google.com"
+    }
 
-    free_keywords = ("gmail", "yahoo", "hotmail", "outlook", "protonmail", "icloud")
-    if any(k in host for k in free_keywords):
-        signals.append("Domain looks like a free-email style host (unusual for official careers).")
+    for td in TRUSTED_DOMAINS:
+        if host == td or host.endswith("." + td):
+            is_trusted = True
+            break
+            
+    if is_trusted:
+        signals.append("Verified top-tier company or trusted applicant tracking system.")
+        risk_boost -= 20
+    else:
+        tld = "." + host.split(".")[-1] if "." in host else ""
+        if any(host.endswith(s) for s in SUSPICIOUS_TLDS):
+            signals.append(f"Uses a commonly abused TLD ({tld}).")
+            risk_boost += 12
+
+        free_keywords = ("gmail", "yahoo", "hotmail", "outlook", "protonmail", "icloud")
+        if any(k in host for k in free_keywords):
+            signals.append("Domain looks like a free-email style host (unusual for official careers).")
+            risk_boost += 15
+
+        if not signals:
+            signals.append("Domain looks standard; still verify company + careers page.")
+
+    return {"hostname": host, "signals": signals, "risk_boost": risk_boost, "is_trusted": is_trusted}
+
+
+def verify_company_legitimacy(company_name: str, domain: str, page_text: str) -> dict:
+    """Verify if a company is legitimate based on name, domain, and page content."""
+    company_lower = (company_name or "").lower().strip()
+    domain_clean = domain.lower().replace("www.", "").replace("https://", "").replace("http://", "")
+    domain_base = domain_clean.split("/")[0].split(".")[0]  # Get main domain name
+    
+    signals = []
+    risk_boost = 0
+    is_verified = False
+    
+    if not company_name:
+        signals.append("Could not identify company name from page.")
         risk_boost += 15
+        return {"company_name": company_name, "signals": signals, "risk_boost": risk_boost, "is_verified": is_verified}
+    
+    # Check company legitimacy indicators
+    page_text_lower = page_text.lower()
+    
+    # Strong legitimacy signals
+    legitimate_signals = [
+        (r'\bfounded\s+in\s+\d{4}', "Company founding year mentioned"),
+        (r'\b(ceo|founder|leadership|team|about\s+us)\b', "Company background information provided"),
+        (r'\b(headquarters?|office\s+location|address)\b', "Physical office location mentioned"),
+        (r'\b(awards?|certifications?|recognized|accredited)\b', "Awards or certifications listed"),
+        (r'\b(employees?|staff|team\s+member)\b', "Employee information present"),
+        (r'\b(client|partner|customers?)\b', "Client/customer references found"),
+        (r'\b(privacy\s+policy|terms\s+of\s+service|contact\s+us)\b', "Legal pages available"),
+    ]
+    
+    legitimate_count = 0
+    for pattern, signal_text in legitimate_signals:
+        if re.search(pattern, page_text_lower):
+            legitimate_count += 1
+            signals.append(signal_text)
+    
+    # Scam red flags
+    scam_patterns = [
+        (r'\b(whatsapp|telegram|viber|wechat)\s*(only|contact|number)\b', "Communication only through messaging apps"),
+        (r'(payment|fee|charges?|deposit|investment)\s*(required|needed|payment)\b', "Payment required upfront"),
+        (r'\b(guarantee|100%|assured)\s*(job|income|earning)\b', "Unrealistic guarantees"),
+        (r'\b(urgently?|immediately|last\s+(minute|moment))\b', "Artificial urgency"),
+        (r'\b(work\s+from\s+home|wfh|remote)\s+(no\s+)?(investment|fee)\b', "Work from home with investment"),
+        (r'\b(no\s+experience|no\s+qualification|no\s+education)\s*(required|needed)\b', "Unrealistic job requirements"),
+    ]
+    
+    scam_count = 0
+    for pattern, signal_text in scam_patterns:
+        if re.search(pattern, page_text_lower):
+            scam_count += 1
+            signals.append(signal_text)
 
-    if not signals:
-        signals.append("Domain looks standard; still verify company + careers page.")
+    company_mentioned = company_lower in page_text_lower
+    if company_mentioned:
+        signals.append("Company name appears in page text")
+    else:
+        signals.append("Company name not clearly present in page text")
+        risk_boost += 5
 
-    return {"hostname": host, "signals": signals, "risk_boost": risk_boost}
+    # Check domain-company name match
+    domain_match = domain_base in company_lower or company_lower in domain_base
+    if domain_match:
+        signals.append("Domain name matches company name")
+        risk_boost -= 5
+    else:
+        signals.append(f"Domain '{domain_base}' doesn't match company '{company_lower}'")
+        risk_boost += 8
+
+    # Suspicious domain keywords in URL
+    suspicious_domain_tokens = {
+        "job", "career", "apply", "hiring", "intern", "placement", "earn", "money", "pay", "recruit", "staff"
+    }
+    if any(token in domain_clean for token in suspicious_domain_tokens):
+        signals.append("Domain contains suspicious job-related keywords")
+        risk_boost += 8
+
+    known_fake_names = {"cognifyz", "codesoft", "apex", "quickhirepro", "instantjobgate", "earnmorenow"}
+    if company_lower in known_fake_names:
+        signals.append("Company name matches known suspicious fake company patterns")
+        risk_boost += 20
+
+    # Assess overall legitimacy
+    if scam_count >= 1:
+        signals.append("Scam indicator present; company should not be trusted")
+        risk_boost += 20
+        is_verified = False
+    elif legitimate_count >= 3 and domain_match and company_mentioned:
+        signals.append("Multiple legitimacy indicators found and company/domain match confirmed")
+        is_verified = True
+        risk_boost -= 15
+    elif legitimate_count >= 4:
+        signals.append("Many legitimacy indicators found")
+        is_verified = True
+        risk_boost -= 10
+    elif legitimate_count >= 2 and (domain_match or company_mentioned):
+        signals.append("Some legitimacy indicators found; treat company as unverified until more evidence appears")
+        risk_boost -= 5
+    else:
+        if not domain_match:
+            signals.append("Company/domain match is weak, treat as unverified")
+        if not company_mentioned:
+            signals.append("Company name is not verified on the page")
+        risk_boost += scam_count * 8
+    
+    return {
+        "company_name": company_name,
+        "signals": signals,
+        "risk_boost": risk_boost,
+        "is_verified": is_verified,
+        "legitimate_indicators": legitimate_count,
+        "scam_indicators": scam_count
+    }
+
 
 
 @app.get("/")
@@ -394,35 +641,93 @@ def scan_url():
         return json_error("Invalid URL.")
 
     domain_info = analyze_domain(parsed.netloc)
-    page_text, fetch_error = fetch_html_text(raw_url)
+    page_text, company_info, fetch_error = fetch_html_text(raw_url)
 
     response = {
         "mode": "url_scan",
         "url": raw_url,
         "domain": domain_info,
+        "company_info": company_info,
         "fetch_error": fetch_error,
         "text_preview": "",
     }
 
     if fetch_error or len(page_text) < 80:
-        response["result"] = "UNKNOWN"
-        response["risk_score"] = min(50 + domain_info["risk_boost"], 95)
-        response["confidence"] = None
-        response["note"] = (
-            "Could not read enough text from this page (login wall, blocked, or PDF). "
-            "Domain checks still apply; try pasting text or use the Red-Flag Quiz."
-        )
+        response["result"] = "FAKE"
+        response["risk_score"] = 0
+        response["confidence"] = 1.0
+        if parsed.netloc in KNOWN_FAKE_DOMAINS:
+            response["note"] = (
+                "Known fake domain detected. This site is flagged as fraudulent even if content is not readable."
+            )
+        else:
+            response["note"] = (
+                "Could not read enough text from this page (login wall, blocked, or PDF). "
+                "Unknown or unreadable pages are treated as fake to avoid false trust."
+            )
         return jsonify(response)
 
-    ml = predict_from_text(page_text)
-    combined = min(100, ml["risk_score"] + domain_info["risk_boost"] // 2)
+    enhanced_text = page_text
+    extracted_company = company_info.get("name", "")
+    
+    if extracted_company:
+        enhanced_text += f"\nCompany: {extracted_company} {company_info.get('job_title', '')} {company_info.get('description', '')}"
 
+    ml = predict_from_text(enhanced_text, raw_url)
+
+    if parsed.netloc in KNOWN_FAKE_DOMAINS:
+        ml["result"] = "FAKE"
+        ml["risk_score"] = 0
+        ml["confidence"] = 1.0
+
+    # Verify company legitimacy
+    company_verification = verify_company_legitimacy(
+        extracted_company,
+        parsed.netloc,
+        page_text
+    )
+    
+    # Combine all signals
+    base_risk_score = ml["risk_score"]
+    domain_risk = domain_info.get("risk_boost", 0)
+    company_risk = company_verification.get("risk_boost", 0)
+    
+    combined = base_risk_score
+    
+    if domain_info.get("is_trusted"):
+        combined = min(100, combined + 15)
+
+    combined = max(0, combined - abs(domain_risk))
+    combined = max(0, combined - abs(company_risk))
+
+    if company_verification.get("is_verified"):
+        combined = min(100, combined + 10)
+
+    if company_verification.get("scam_indicators", 0) >= 1 and not company_verification.get("is_verified"):
+        ml["result"] = "FAKE"
+        combined = 0
+
+    if ml["result"] == "GENUINE":
+        combined = 100
+        ml["confidence"] = 1.0
+    elif ml["result"] == "FAKE":
+        combined = 0
+        ml["confidence"] = 1.0
+
+    # Add company verification details to response
     response["text_preview"] = page_text[:400] + ("..." if len(page_text) > 400 else "")
     response["result"] = ml["result"]
     response["risk_score"] = combined
     response["confidence"] = ml["confidence"]
+    response["company_verification"] = {
+        "name": company_verification.get("company_name", "Unknown"),
+        "is_verified": company_verification.get("is_verified"),
+        "signals": company_verification.get("signals", []),
+        "legitimate_indicators": company_verification.get("legitimate_indicators", 0),
+        "scam_indicators": company_verification.get("scam_indicators", 0),
+    }
     response["note"] = (
-        "Combined ML score on fetched page text + domain signals. "
+        "Deep analysis: ML score + domain analysis + company legitimacy verification. "
         "Always verify on official career sites."
     )
     return jsonify(response)
@@ -443,10 +748,10 @@ def quiz_score():
             total += weight
             triggered.append(qid)
 
-    total = min(total, 100)
-    if total >= 55:
+    trust_total = 100 - min(total, 100)
+    if trust_total <= 45:
         label = "HIGH RISK"
-    elif total >= 28:
+    elif trust_total <= 70:
         label = "SUSPICIOUS"
     else:
         label = "LOWER RISK (still verify)"
@@ -454,7 +759,7 @@ def quiz_score():
     return jsonify(
         {
             "mode": "quiz",
-            "risk_score": total,
+            "risk_score": trust_total,
             "label": label,
             "triggered_flags": triggered,
             "max_possible": 100,

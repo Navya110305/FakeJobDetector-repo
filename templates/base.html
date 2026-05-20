@@ -3,10 +3,20 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  
+  <!-- SEO Best Practices -->
+  <meta name="description" content="JobShield - Protect yourself from fake job postings and scam internships. Free machine learning scanner and analysis for students." />
+  <meta name="author" content="JobShield Open Source" />
+  <meta property="og:title" content="JobShield - Fake Job Detector" />
+  <meta property="og:description" content="Spot fake internships & job posts before you apply using machine learning and domain analysis." />
+  <meta property="og:type" content="website" />
+  
   <title>{% block title %}JobShield{% endblock %}</title>
+  
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}" />
   {% block extra_head %}{% endblock %}
 </head>

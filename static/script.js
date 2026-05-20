@@ -66,14 +66,15 @@ function parseNumericScore(text) {
   return Number.isFinite(n) ? Math.min(100, Math.max(0, n)) : null;
 }
 
-function riskCaption(score) {
+function riskCaption(score, isFake) {
   if (score === null || score === undefined) return "—";
-  if (score < 30) return "Lower concern";
-  if (score < 55) return "Review carefully";
+  if (isFake) return "High concern";
+  if (score >= 75) return "High Trust";
+  if (score >= 45) return "Review carefully";
   return "High concern";
 }
 
-function setRiskVisual(score) {
+function setRiskVisual(score, isFake) {
   const pct = score === null || score === undefined ? 0 : score;
   const offset = RING_C * (1 - pct / 100);
   riskRingFill.style.strokeDasharray = String(RING_C);
@@ -81,11 +82,13 @@ function setRiskVisual(score) {
   riskRingValue.textContent = score === null || score === undefined ? "—" : String(score);
   riskBarFill.style.width = `${pct}%`;
   riskBar.setAttribute("aria-valuenow", String(pct));
-  riskBarCaption.textContent = riskCaption(score === null ? null : score);
+  riskBarCaption.textContent = riskCaption(score === null ? null : score, isFake);
 
-  if (pct < 30) {
+  if (isFake) {
+    riskRingFill.style.stroke = "var(--danger)";
+  } else if (pct >= 75) {
     riskRingFill.style.stroke = "var(--success)";
-  } else if (pct < 55) {
+  } else if (pct >= 45) {
     riskRingFill.style.stroke = "var(--warning)";
   } else {
     riskRingFill.style.stroke = "var(--danger)";
@@ -182,8 +185,10 @@ function showResult(payload) {
   resultLabel.textContent = payload.label;
 
   const numeric = parseNumericScore(payload.riskScoreText);
-  setRiskVisual(numeric);
-  setBadgeForResult(payload.label, numeric, payload.modeKey);
+  const isFake = String(payload.label).toUpperCase().includes("FAKE");
+  const displayScore = isFake ? 100 : numeric;
+  setRiskVisual(displayScore, isFake);
+  setBadgeForResult(payload.label, displayScore, payload.modeKey);
 
   if (payload.showConfidence) {
     confidenceRow.style.display = "";
@@ -252,10 +257,22 @@ async function scanUrl() {
     const data = await fetchJson("/scan-url", { url });
 
     const domainSignals = (data.domain && data.domain.signals) || [];
-    const signalsHtml =
+    let signalsHtml =
       domainSignals.length > 0
         ? `<p><strong>Domain signals</strong></p><ul>${domainSignals.map((s) => `<li>${escapeHtml(s)}</li>`).join("")}</ul>`
         : "";
+
+    if (data.company_info && Object.keys(data.company_info).length > 0) {
+      const ci = data.company_info;
+      let ciHtml = `<div class="extra-block company-info" style="margin-top:0.5rem; border-color:var(--primary); background:rgba(139, 92, 246, 0.05); padding:1rem; border-radius:8px;">`;
+      ciHtml += `<p style="margin:0 0 0.5rem; font-weight:600; color:#fff;">🏢 Extracted Company Info</p>`;
+      if (ci.name) ciHtml += `<p style="margin:0.25rem 0; font-size:0.875rem;"><strong>Name:</strong> ${escapeHtml(ci.name)}</p>`;
+      if (ci.job_title) ciHtml += `<p style="margin:0.25rem 0; font-size:0.875rem;"><strong>Job Title:</strong> ${escapeHtml(ci.job_title)}</p>`;
+      if (ci.title) ciHtml += `<p style="margin:0.25rem 0; font-size:0.875rem;"><strong>Page Title:</strong> ${escapeHtml(ci.title)}</p>`;
+      if (ci.description) ciHtml += `<p style="margin:0.25rem 0; font-size:0.875rem;"><strong>Description:</strong> ${escapeHtml(ci.description)}</p>`;
+      ciHtml += `</div>`;
+      signalsHtml = ciHtml + signalsHtml;
+    }
 
     let label = data.result;
     if (data.result === "UNKNOWN") {
