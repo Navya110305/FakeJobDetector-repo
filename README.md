@@ -1,8 +1,5 @@
 # 🛡️ JobShield — Student Job & Internship Scam Detector
 
-<p align="center">
-  <img src="static/jobshield_banner.png" alt="JobShield Banner" width="100%" style="border-radius: 8px;" />
-</p>
 
 <p align="center">
   <a href="https://jobshield-c613.onrender.com">
